@@ -6,30 +6,33 @@ plugins {
 }
 
 android {
-    namespace = "com.nova.cvapp" // ✅ Match your new Firebase project
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    namespace = "com.nova.cvapp" // ✅ Match your Firebase project
+    compileSdk = 35              // Updated for Flutter 3.24.5
 
     defaultConfig {
-        applicationId "com.nova.cvapp" // ✅ Match new Firebase
-        minSdk = flutter.minSdkVersion  // Usually 21
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        applicationId "com.nova.cvapp" // ✅ Match Firebase
+        minSdk = 21                    // Minimum supported
+        targetSdk = 34                 // Updated
+        versionCode 1
+        versionName "1.0.0"
     }
 
+    ndkVersion "28.2.13676358"
+
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8
+        jvmTarget = "1.8"
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
@@ -39,14 +42,17 @@ flutter {
 }
 
 dependencies {
-    // ✅ Firebase BoM (safe older version)
-    implementation platform('com.google.firebase:firebase-bom:31.1.1')
+    // ✅ Firebase BoM (stable version for compatibility)
+    implementation platform('com.google.firebase:firebase-bom:32.2.2')
 
-    // ✅ Firebase SDKs – add only what you use
-    implementation 'com.google.firebase:firebase-analytics'
-    implementation 'com.google.firebase:firebase-auth'
-    implementation 'com.google.firebase:firebase-firestore'
+    // ✅ Firebase SDKs – only what you need
+    implementation 'com.google.firebase:firebase-analytics-ktx'
+    implementation 'com.google.firebase:firebase-auth-ktx'
+    implementation 'com.google.firebase:firebase-firestore-ktx'
+
+    // ✅ Optional Google Sign-In support
+    implementation 'com.google.android.gms:play-services-auth:20.7.0'
 }
 
-// ✅ Keep this at the bottom
+// ✅ Keep this at the bottom for Firebase plugin
 apply plugin: 'com.google.gms.google-services'

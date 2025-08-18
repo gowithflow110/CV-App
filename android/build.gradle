@@ -1,11 +1,19 @@
 buildscript {
+    ext {
+        compileSdkVersion = 34       // ✅ Added
+        minSdkVersion = 21           // ✅ Required for speech_to_text
+        targetSdkVersion = 34
+        kotlin_version = '1.9.22'    // ✅ Needed for Kotlin plugins
+    }
+
     repositories {
         google()
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.1.0'
+        classpath 'com.android.tools.build:gradle:8.5.0'
         classpath 'com.google.gms:google-services:4.4.3'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
 

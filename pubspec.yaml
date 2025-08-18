@@ -10,21 +10,27 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  firebase_core: ^2.27.0
-  firebase_auth: ^4.17.4
+  # Firebase
+  firebase_core: ^2.32.0
+  firebase_auth: ^4.16.0
   cloud_firestore: ^4.15.8
+  firebase_analytics: ^10.10.7
+  firebase_auth_mocks: ^0.13.0
+
+  # Google Sign-In
   google_sign_in: ^6.2.1
-  google_fonts: ^6.3.0              # ✅ From Bilal
+
+  # Others
+  google_fonts: ^6.3.0
   cupertino_icons: ^1.0.8
-  speech_to_text: ^6.6.2
-  permission_handler: 10.2.0
+  speech_to_text: 7.0.0   # avoid beta 7.x
+  permission_handler: ^11.3.4
   provider: ^6.0.5
   lottie: ^3.1.0
-  firebase_analytics: ^10.10.7
   hive: ^2.2.3
   hive_flutter: ^1.1.0
   path_provider: ^2.1.1
-  connectivity_plus: 6.1.4
+  connectivity_plus: ^6.1.4
   shared_preferences: ^2.0.15
 
 dev_dependencies:
@@ -41,7 +47,7 @@ flutter:
   uses-material-design: true
 
   assets:
-#    - assets/logo.jpg
+    #    - assets/logo.jpg
     - assets/google_icon.png
     - assets/lottie/ai_processing.json
     - assets/google_logo.png       # ✅ Required by Bilal's sign-in button
