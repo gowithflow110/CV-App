@@ -1,12 +1,9 @@
-//voice_input_controller.dart
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/firestore_service.dart';
 import 'dart:io';
-
 
 class VoiceInputController extends ChangeNotifier {
   final FirestoreService _firestoreService = FirestoreService();
@@ -33,78 +30,77 @@ class VoiceInputController extends ChangeNotifier {
   }
 
   void _initSections() {
-  sections = [
-    {
-      'title': 'Full Name',
-      'key': 'name',
-      'required': true,
-      'multiple': false,
-      'hint': "What's your full name? Example: My name is Ali Ahmed."
-    },
-    {
-      'title': 'Contact Info',
-      'key': 'contact',
-      'required': true,
-      'multiple': true,
-      'hint': "Share your phone, email or address. Example: My phone number is 03001234560."
-    },
-    {
-      'title': 'Education',
-      'key': 'education',
-      'required': true,
-      'multiple': true,
-      'hint': "Mention your education. Example: I completed my Bachelor's from Punjab University in 2022."
-    },
-    {
-      'title': 'Skills',
-      'key': 'skills',
-      'required': true,
-      'multiple': true,
-      'hint': "List your skills. Example: I am good at communication, teamwork, and using MS Office."
-    },
-    {
-      'title': 'Languages',
-      'key': 'languages',
-      'required': true, // ✅ Changed to required
-      'multiple': true,
-      'hint': "Which languages do you speak? Example: I can speak English, Urdu, and Punjabi."
-    },
-    {
-      'title': 'Certifications',
-      'key': 'certifications',
-      'required': false,
-      'multiple': true,
-      'hint': "Say a certificate you earned. Example: I completed a course in Office Management from ABC Institute."
-    },
-    {
-      'title': 'Work Experience',
-      'key': 'experience',
-      'required': false, // ✅ Changed to optional
-      'multiple': true,
-      'hint': "Talk about your job experience. Example: I worked as a sales man at Metro Store for 2 years."
-    },
-    {
-      'title': 'Projects',
-      'key': 'projects',
-      'required': false,
-      'multiple': true,
-      'hint': "Mention a project you’ve done. Example: I helped set up a billing system at my last job."
-    },
-    {
-      'title': 'Professional Summary',
-      'key': 'summary',
-      'required': false,
-      'multiple': false,
-      'hint': "Briefly describe yourself. Example: I am a hardworking individual with strong communication skills and a passion for learning."
-    },
-  ];
+    sections = [
+      {
+        'title': 'Full Name',
+        'key': 'name',
+        'required': true,
+        'multiple': false,
+        'hint': "What's your full name? Example: My name is Ali Ahmed."
+      },
+      {
+        'title': 'Contact Info',
+        'key': 'contact',
+        'required': true,
+        'multiple': true,
+        'hint': "Share your phone, email or address. Example: My phone number is 03001234560."
+      },
+      {
+        'title': 'Education',
+        'key': 'education',
+        'required': true,
+        'multiple': true,
+        'hint': "Mention your education. Example: I completed my Bachelor's from Punjab University in 2022."
+      },
+      {
+        'title': 'Skills',
+        'key': 'skills',
+        'required': true,
+        'multiple': true,
+        'hint': "List your skills. Example: I am good at communication, teamwork, and using MS Office."
+      },
+      {
+        'title': 'Languages',
+        'key': 'languages',
+        'required': true,
+        'multiple': true,
+        'hint': "Which languages do you speak? Example: I can speak English, Urdu, and Punjabi."
+      },
+      {
+        'title': 'Certifications',
+        'key': 'certifications',
+        'required': false,
+        'multiple': true,
+        'hint': "Say a certificate you earned. Example: I completed a course in Office Management from ABC Institute."
+      },
+      {
+        'title': 'Work Experience',
+        'key': 'experience',
+        'required': false,
+        'multiple': true,
+        'hint': "Talk about your job experience. Example: I worked as a sales man at Metro Store for 2 years."
+      },
+      {
+        'title': 'Projects',
+        'key': 'projects',
+        'required': false,
+        'multiple': true,
+        'hint': "Mention a project you’ve done. Example: I helped set up a billing system at my last job."
+      },
+      {
+        'title': 'Professional Summary',
+        'key': 'summary',
+        'required': false,
+        'multiple': false,
+        'hint': "Briefly describe yourself. Example: I am a hardworking individual with strong communication skills and a passion for learning."
+      },
+    ];
 
-  // Initialize userData
-  for (var section in sections) {
-    userData[section['key']] = section['multiple'] ? <String>[] : '';
+    // Initialize userData
+    for (var section in sections) {
+      userData[section['key']] = section['multiple'] ? <String>[] : '';
+    }
   }
-}
-
 
   /// ======================
   /// ✅ SPEECH FUNCTIONS
@@ -181,14 +177,13 @@ class VoiceInputController extends ChangeNotifier {
     }
 
     await initializeSpeech();
-    await Future.delayed(Duration(milliseconds: 100)); // Give a moment for state update
+    await Future.delayed(Duration(milliseconds: 100));
     if (!_speech.isAvailable || micFailed) {
       debugPrint("🚫 Mic not available, fallback required");
       micFailed = true;
       notifyListeners();
       return;
     }
-
 
     isListening = true;
     transcription = '';
@@ -198,17 +193,13 @@ class VoiceInputController extends ChangeNotifier {
       onResult: (result) async {
         transcription = result.recognizedWords;
         notifyListeners();
-
-
       },
-
       listenFor: const Duration(seconds: 30),
       pauseFor: const Duration(seconds: 5),
       partialResults: true,
       listenMode: stt.ListenMode.dictation,
     );
   }
-
 
   Future<void> stopListening() async {
     if (_speech.isListening) {
@@ -320,7 +311,7 @@ class VoiceInputController extends ChangeNotifier {
     transcription = (userData[key] as List<String>)[index];
     (userData[key] as List<String>).removeAt(index);
     notifyListeners();
-    startListening(context); // ✅ pass context here
+    startListening(context);
   }
 
   void deleteEntry(String key, int index) {
@@ -329,7 +320,6 @@ class VoiceInputController extends ChangeNotifier {
   }
 
   Future<String?> nextSection(BuildContext context) async {
-    // ✅ 1. Check internet FIRST before any UI change
     final isConnected = await hasInternet();
     if (!isConnected) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -356,7 +346,6 @@ class VoiceInputController extends ChangeNotifier {
     final required = section['required'];
     final multiple = section['multiple'];
 
-    // ✅ Add input to userData
     if (transcription.trim().isNotEmpty) {
       if (multiple) {
         (userData[key] as List<String>).add(transcription.trim());
@@ -393,12 +382,10 @@ class VoiceInputController extends ChangeNotifier {
           ),
         ),
       );
-
       return null;
     }
 
     try {
-      // ✅ Only now, if everything is okay, show loading animation
       isLoading = true;
       notifyListeners();
 
@@ -433,9 +420,6 @@ class VoiceInputController extends ChangeNotifier {
     }
   }
 
-
-
-
   void backSection() {
     final section = sections[currentIndex];
     final key = section['key'];
@@ -455,10 +439,24 @@ class VoiceInputController extends ChangeNotifier {
     }
   }
 
+  /// ======================
+  /// ✅ NEW METHOD: Jump directly to a section
+  /// ======================
+  void jumpToSection(int index) {
+    if (index >= 0 && index < sections.length) {
+      currentIndex = index;
+      final key = sections[currentIndex]['key'];
+      transcription = sections[currentIndex]['multiple']
+          ? ''
+          : (userData[key]?.toString() ?? '');
+      notifyListeners();
+    }
+  }
+
   void disposeController() {
     resetSpeech();
   }
-  // ✅ Used by UI to check mic status
+
   bool get isSpeechAvailable => !micFailed;
 
   Future<bool> hasInternet() async {
@@ -469,5 +467,4 @@ class VoiceInputController extends ChangeNotifier {
       return false;
     }
   }
-
 }

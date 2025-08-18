@@ -1,4 +1,4 @@
-// voice_input_screen.dart
+// lib/modules/voice_input/voice_input_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -6,11 +6,8 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import '../../routes/app_routes.dart';
 import 'controller/voice_input_controller.dart';
 import 'widgets/section_progress_bar.dart';
-import 'widgets/section_list_item.dart';
-
 
 class VoiceInputScreen extends StatefulWidget {
-
   const VoiceInputScreen({Key? key}) : super(key: key);
 
   @override
@@ -21,6 +18,7 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
   late VoiceInputController _controller;
   final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
   final ScrollController _scrollController = ScrollController();
+  late TextEditingController _textController;
 
   void _autoScrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -34,16 +32,20 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
   void initState() {
     super.initState();
     _controller = VoiceInputController();
+    _textController = TextEditingController();
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _controller.initializeSpeech();
       await _controller.loadCVData(
         args: ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?,
       );
+      _textController.text = _controller.transcription;
     });
   }
 
   @override
   void dispose() {
+    _textController.dispose();
     _controller.disposeController();
     _scrollController.dispose();
     super.dispose();
@@ -114,6 +116,7 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                         color: Colors.black54,
                       ),
                     ),
+
                     if (multiple)
                       Container(
                         margin: const EdgeInsets.only(top: 6),
@@ -136,31 +139,18 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                       ),
                     const SizedBox(height: 16),
 
-                    // ✅ Chat box
-                    Container(
-                      width: double.infinity,
-                      height: 120,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.blueGrey),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: SingleChildScrollView(
-                        controller: _scrollController,
-                        child: Text(
-                          controller.transcription.isEmpty
-                              ? (multiple
-                              ? 'Your voice input will appear here...'
-                              : (controller.userData[key]?.toString().trim().isNotEmpty == true
-                              ? controller.userData[key].toString()
-                              : 'Your voice input will appear here...'))
-                              : controller.transcription,
-                          style: const TextStyle(fontSize: 16),
-                        ),
+                    // Always show TextField for keyboard input
+                    TextField(
+                      controller: _textController,
+                      onChanged: (value) => controller.transcription = value,
+                      maxLines: null,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'Enter your response here...',
                       ),
                     ),
+                    const SizedBox(height: 10),
 
-                    // ✅ Add entry button
                     if (multiple && controller.transcription.trim().isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 6.0),
@@ -169,7 +159,10 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                           child: TextButton.icon(
                             onPressed: controller.isLoading
                                 ? null
-                                : () => controller.addToMultipleList(key),
+                                : () {
+                              controller.addToMultipleList(key);
+                              _textController.clear();
+                            },
                             icon: const Icon(Icons.add, color: Colors.blue, size: 20),
                             label: const Text(
                               'Add Entry',
@@ -187,30 +180,7 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                       ),
                     const SizedBox(height: 20),
 
-                    // ✅ Manual input fallback
-                    if (!controller.isSpeechAvailable)
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            "Mic not available or failed (give Mic Permission). Please type your response:",
-                            style: TextStyle(fontSize: 14, color: Colors.red),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            onChanged: (value) => controller.transcription = value,
-                            controller: TextEditingController(text: controller.transcription),
-                            decoration: const InputDecoration(
-                              border: OutlineInputBorder(),
-                              hintText: 'Enter response manually...',
-                            ),
-                            maxLines: null,
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                      ),
-
-                    // ✅ Mic button
+                    // Mic button (optional, keeps existing functionality)
                     if (controller.isSpeechAvailable)
                       Center(
                         child: IconButton(
@@ -225,12 +195,12 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                               : () async {
                             final hasNet = await controller.hasInternet();
                             if (!hasNet) {
-                              // ✅ Show offline dialog and STOP here
                               showDialog(
                                 context: context,
                                 builder: (_) => AlertDialog(
                                   title: const Text("🎙️ Internet Required"),
-                                  content: const Text("Voice input needs internet connection. Please reconnect."),
+                                  content: const Text(
+                                      "Voice input needs internet connection. Please reconnect."),
                                   actions: [
                                     TextButton(
                                       child: const Text("OK"),
@@ -239,10 +209,9 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                                   ],
                                 ),
                               );
-                              return; // ❗ VERY IMPORTANT: Don't continue
+                              return;
                             }
 
-                            // ✅ Continue only if online
                             if (!controller.isListening) {
                               await _logEvent("start_listening", params: {"section": key});
                             } else {
@@ -251,13 +220,11 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
 
                             await controller.startListening(context);
                           },
-
                         ),
                       ),
-
                     const SizedBox(height: 20),
 
-                    // ✅ Navigation buttons
+                    // Navigation buttons
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -279,6 +246,7 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                               ? null
                               : () async {
                             await controller.resetSpeech(clearTranscription: true);
+                            _textController.clear();
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text("Retrying current text")),
                             );
@@ -296,66 +264,57 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                                 : Icons.arrow_forward,
                           ),
                           label: Text(
-                            controller.currentIndex == controller.sections.length - 1
-                                ? 'Finish'
-                                : 'Next',
+                            controller.currentIndex == controller.sections.length - 1 ? 'Finish' : 'Next',
                           ),
                           onPressed: controller.isLoading
                               ? null
                               : () async {
-                            // ✅ Check Internet FIRST
-                            final hasInternet = await controller.hasInternet();
-                            if (!hasInternet) {
-                              // 🔒 Show a blocking dialog and STOP
-                              showDialog(
-                                context: context,
-                                builder: (_) => AlertDialog(
-                                  title: const Text("⚠️ No Internet"),
-                                  content: const Text("Please connect to the internet to proceed to the next section."),
-                                  actions: [
-                                    TextButton(
-                                      child: const Text("OK"),
-                                      onPressed: () => Navigator.pop(context),
-                                    ),
-                                  ],
-                                ),
-                              );
-                              return; // ❗ Stop here if offline
-                            }
-
-                            // ✅ Only proceed if online
                             final result = await controller.nextSection(context);
                             if (result == "completed") {
-                              Navigator.pushNamed(
-                                context,
-                                AppRoutes.summary,
-                                arguments: {
-                                  "cvData": controller.userData,
-                                  "totalSections": controller.sections.length,
-                                },
+                              if (!mounted) return;
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                builder: (_) => Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      onPressed: () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          AppRoutes.preview,
+                                          arguments: {"cvData": controller.userData},
+                                        );
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 16),
+                                        backgroundColor: Colors.blue,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Generate CV",
+                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               );
+                            } else {
+                              _textController.clear();
                             }
                           },
-
-
                         ),
                       ],
                     ),
-
-                    const SizedBox(height: 20),
-
-                    // ✅ Multiple entries list
-                    if (multiple && (controller.userData[key] as List).isNotEmpty)
-                      SectionListItem(
-                        entries: List<String>.from(controller.userData[key] as List),
-                        onEdit: (index) => controller.editEntry(context, key, index),
-                        onDelete: (index) => controller.deleteEntry(key, index),
-                      ),
+                    const SizedBox(height: 30),
                   ],
                 ),
               ),
             ),
-
           );
         },
       ),

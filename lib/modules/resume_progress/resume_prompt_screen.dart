@@ -1,7 +1,6 @@
-//resume_prompt_screen.dart
+// lib/modules/resume_progress/resume_prompt_screen.dart
 
 import 'package:flutter/material.dart';
-// import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import '../../routes/app_routes.dart';
@@ -10,7 +9,7 @@ import '../../services/firestore_service.dart';
 class ResumePromptScreen extends StatefulWidget {
   final FirestoreService? firestoreService;
   final FirebaseAnalytics? analytics;
-  final FirebaseAuth? auth; // ✅ NEW: allows mock injection for tests
+  final FirebaseAuth? auth;
 
   const ResumePromptScreen({
     super.key,
@@ -26,7 +25,7 @@ class ResumePromptScreen extends StatefulWidget {
 class _ResumePromptScreenState extends State<ResumePromptScreen> {
   late final FirestoreService _firestoreService;
   late final FirebaseAnalytics _analytics;
-  late final FirebaseAuth _auth; // ✅ NEW
+  late final FirebaseAuth _auth;
 
   bool _loading = true;
   Map<String, dynamic>? _lastCV;
@@ -37,13 +36,13 @@ class _ResumePromptScreenState extends State<ResumePromptScreen> {
     super.initState();
     _firestoreService = widget.firestoreService ?? FirestoreService();
     _analytics = widget.analytics ?? FirebaseAnalytics.instance;
-    _auth = widget.auth ?? FirebaseAuth.instance; // ✅ use mock in tests
+    _auth = widget.auth ?? FirebaseAuth.instance;
     _checkLastCV();
   }
 
   Future<void> _checkLastCV() async {
     try {
-      final user = _auth.currentUser; // ✅ replaced direct FirebaseAuth.instance
+      final user = _auth.currentUser;
       if (user == null) {
         Navigator.pushReplacementNamed(context, AppRoutes.login);
         return;
@@ -126,11 +125,11 @@ class _ResumePromptScreenState extends State<ResumePromptScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white, // ✅ Body color
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Resume CV Progress'),
         centerTitle: true,
-        backgroundColor: const Color(0xFFE8F3F8), // ✅ Head color
+        backgroundColor: const Color(0xFFE8F3F8),
         elevation: 0,
       ),
       body: _loading
@@ -140,7 +139,6 @@ class _ResumePromptScreenState extends State<ResumePromptScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            /// ✅ Top Icon
             Container(
               padding: const EdgeInsets.all(24),
               decoration: const BoxDecoration(
@@ -158,8 +156,6 @@ class _ResumePromptScreenState extends State<ResumePromptScreen> {
               ),
             ),
             const SizedBox(height: 24),
-
-            /// ✅ Title & Subtitle
             Text(
               _errorMessage ?? "Resume Your CV Progress?",
               style: const TextStyle(
@@ -173,12 +169,13 @@ class _ResumePromptScreenState extends State<ResumePromptScreen> {
             Text(
               _errorMessage ??
                   "We found an incomplete CV. Would you like to continue where you left off?",
-              style: const TextStyle(fontSize: 15, color: Colors.black54),
+              style:
+              const TextStyle(fontSize: 15, color: Colors.black54),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 40),
 
-            /// ✅ Resume Button (Primary)
+            // ✅ Resume Button
             SizedBox(
               width: double.infinity,
               height: 50,
@@ -200,7 +197,7 @@ class _ResumePromptScreenState extends State<ResumePromptScreen> {
             ),
             const SizedBox(height: 16),
 
-            /// ✅ Start Fresh Button (Secondary)
+            // ✅ Start Fresh Button
             SizedBox(
               width: double.infinity,
               height: 50,
