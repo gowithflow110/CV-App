@@ -1,95 +1,76 @@
 // lib/models/cv_model.dart
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 class CVModel {
-  String? name;
-  String? title;
-  String? summary;
-  String? email;
-  String? phone;
-  String? location;
-  String? linkedin;
-  List<String>? skills;
-  List<CVExperience>? experiences;
+  final String cvId;                // Unique CV ID (same pattern as existing: cv_<timestamp>)
+  final String userId;              // Owner's Firebase UID
+  final Map<String, dynamic> cvData; // All CV sections (name, contact, skills, etc.)
+  final bool isCompleted;           // Whether CV was marked complete
+  final String? aiEnhancedText;     // Optional: AI-enhanced version
+  final DateTime createdAt;         // Timestamp when CV was first created
+  final DateTime updatedAt;         // Timestamp when CV was last updated
 
   CVModel({
-    this.name,
-    this.title,
-    this.summary,
-    this.email,
-    this.phone,
-    this.location,
-    this.linkedin,
-    this.skills,
-    this.experiences,
+    required this.cvId,
+    required this.userId,
+    required this.cvData,
+    required this.isCompleted,
+    this.aiEnhancedText,
+    required this.createdAt,
+    required this.updatedAt,
   });
 
-  Map<String, dynamic> toMap() {
-    return {
-      'name': name,
-      'title': title,
-      'summary': summary,
-      'email': email,
-      'phone': phone,
-      'location': location,
-      'linkedin': linkedin,
-      'skills': skills,
-      'experiences': experiences?.map((e) => e.toMap()).toList(),
-    };
-  }
+  /// ✅ Create a CVModel from Firestore data
+  factory CVModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
 
-  factory CVModel.fromMap(Map<String, dynamic> map) {
     return CVModel(
-      name: map['name'],
-      title: map['title'],
-      summary: map['summary'],
-      email: map['email'],
-      phone: map['phone'],
-      location: map['location'],
-      linkedin: map['linkedin'],
-      skills: List<String>.from(map['skills'] ?? []),
-      experiences: (map['experiences'] as List<dynamic>?)
-          ?.map((e) => CVExperience.fromMap(Map<String, dynamic>.from(e)))
-          .toList(),
+      cvId: data['cvId'] ?? '',
+      userId: data['userId'] ?? '',
+      cvData: Map<String, dynamic>.from(data['cvData'] ?? {}),
+      isCompleted: data['isCompleted'] ?? false,
+      aiEnhancedText: data['aiEnhancedText'],
+      createdAt: (data['createdAt'] is Timestamp)
+          ? (data['createdAt'] as Timestamp).toDate()
+          : DateTime.now(),
+      updatedAt: (data['updatedAt'] is Timestamp)
+          ? (data['updatedAt'] as Timestamp).toDate()
+          : DateTime.now(),
     );
   }
-}
 
-class CVExperience {
-  String? position;
-  String? company;
-  String? location;
-  String? startDate;
-  String? endDate;
-  List<String>? responsibilities;
-
-  CVExperience({
-    this.position,
-    this.company,
-    this.location,
-    this.startDate,
-    this.endDate,
-    this.responsibilities,
-  });
-
+  /// ✅ Convert CVModel to Firestore format
   Map<String, dynamic> toMap() {
     return {
-      'position': position,
-      'company': company,
-      'location': location,
-      'startDate': startDate,
-      'endDate': endDate,
-      'responsibilities': responsibilities,
+      'cvId': cvId,
+      'userId': userId,
+      'cvData': cvData,
+      'isCompleted': isCompleted,
+      'aiEnhancedText': aiEnhancedText,
+      'createdAt': createdAt is DateTime ? Timestamp.fromDate(createdAt) : createdAt,
+      'updatedAt': updatedAt is DateTime ? Timestamp.fromDate(updatedAt) : updatedAt,
     };
   }
 
-  factory CVExperience.fromMap(Map<String, dynamic> map) {
-    return CVExperience(
-      position: map['position'],
-      company: map['company'],
-      location: map['location'],
-      startDate: map['startDate'],
-      endDate: map['endDate'],
-      responsibilities: List<String>.from(map['responsibilities'] ?? []),
+  /// ✅ Create a copy of CVModel with updated fields
+  CVModel copyWith({
+    String? cvId,
+    String? userId,
+    Map<String, dynamic>? cvData,
+    bool? isCompleted,
+    String? aiEnhancedText,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return CVModel(
+      cvId: cvId ?? this.cvId,
+      userId: userId ?? this.userId,
+      cvData: cvData ?? this.cvData,
+      isCompleted: isCompleted ?? this.isCompleted,
+      aiEnhancedText: aiEnhancedText ?? this.aiEnhancedText,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

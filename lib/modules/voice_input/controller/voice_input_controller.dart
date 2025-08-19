@@ -1,9 +1,11 @@
+// lib/modules/voice_input/controller/voice_input_controller.dart
+
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../services/firestore_service.dart';
-import 'dart:io';
 
 class VoiceInputController extends ChangeNotifier {
   final FirestoreService _firestoreService = FirestoreService();
@@ -21,8 +23,24 @@ class VoiceInputController extends ChangeNotifier {
   int currentIndex = 0;
   Map<String, dynamic> userData = {};
 
-  // ✅ SCRUM-81: Mic Fallback Logic
   bool micFailed = false;
+
+  // New: Manual input toggle
+  bool _isManualInput = false;
+  bool get isManualInput => _isManualInput;
+  set isManualInput(bool val) {
+    if (_isManualInput != val) {
+      _isManualInput = val;
+      if (_isManualInput) {
+        // If switching to manual input, stop listening immediately
+        stopListening();
+      } else {
+        // Switching back to voice input, clear transcription so speech recognizer can start fresh
+        transcription = '';
+      }
+      notifyListeners();
+    }
+  }
 
   VoiceInputController() {
     userId = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -78,7 +96,7 @@ class VoiceInputController extends ChangeNotifier {
         'key': 'experience',
         'required': false,
         'multiple': true,
-        'hint': "Talk about your job experience. Example: I worked as a sales man at Metro Store for 2 years."
+        'hint': "Talk about your job experience. Example: I worked as a salesman at Metro Store for 2 years."
       },
       {
         'title': 'Projects',
@@ -96,16 +114,13 @@ class VoiceInputController extends ChangeNotifier {
       },
     ];
 
-    // Initialize userData
+    // Initialize userData with empty values or lists according to 'multiple'
     for (var section in sections) {
       userData[section['key']] = section['multiple'] ? <String>[] : '';
     }
   }
 
-  /// ======================
-  /// ✅ SPEECH FUNCTIONS
-  /// ======================
-
+  /// Initialize speech recognizer and handle mic availability
   Future<void> initializeSpeech() async {
     if (_speech.isListening) {
       await _speech.stop();
@@ -118,7 +133,6 @@ class VoiceInputController extends ChangeNotifier {
     try {
       available = await _speech.initialize(
         onStatus: (status) {
-          debugPrint("Speech Status: $status");
           if (status == 'done' || status == 'notListening') {
             if (isListening) {
               isListening = false;
@@ -127,12 +141,12 @@ class VoiceInputController extends ChangeNotifier {
           }
         },
         onError: (error) {
-          debugPrint("Speech Error: $error");
           stopListening();
+          micFailed = true;
+          notifyListeners();
         },
       );
     } catch (e) {
-      debugPrint("❌ Exception during mic init: $e");
       micFailed = true;
       notifyListeners();
       return;
@@ -141,33 +155,38 @@ class VoiceInputController extends ChangeNotifier {
     isListening = false;
 
     if (!available) {
-      debugPrint("⚠️ Speech recognition not available");
       micFailed = true;
     }
 
     notifyListeners();
   }
 
+  /// Resets speech recognition and optionally clears transcription text
   Future<void> resetSpeech({bool clearTranscription = true}) async {
     if (_speech.isListening) {
       await _speech.stop();
     }
     await _speech.cancel();
+
     isListening = false;
 
-    if (clearTranscription) {
+    if (clearTranscription && !_isManualInput) {
       transcription = '';
     }
-
-    micFailed = false; // Reset fallback state when retrying
+    micFailed = false;
     notifyListeners();
   }
 
+  /// Starts listening to speech and updates transcription in real time
   Future<void> startListening(BuildContext context) async {
+    if (_isManualInput) {
+      // If manual input mode is on, do not start listening
+      return;
+    }
+
     if (!await hasInternet()) {
       micFailed = true;
       notifyListeners();
-      debugPrint("📴 Mic blocked due to no internet");
       return;
     }
 
@@ -177,9 +196,9 @@ class VoiceInputController extends ChangeNotifier {
     }
 
     await initializeSpeech();
-    await Future.delayed(Duration(milliseconds: 100));
+    await Future.delayed(const Duration(milliseconds: 100));
+
     if (!_speech.isAvailable || micFailed) {
-      debugPrint("🚫 Mic not available, fallback required");
       micFailed = true;
       notifyListeners();
       return;
@@ -190,7 +209,7 @@ class VoiceInputController extends ChangeNotifier {
     notifyListeners();
 
     await _speech.listen(
-      onResult: (result) async {
+      onResult: (result) {
         transcription = result.recognizedWords;
         notifyListeners();
       },
@@ -201,6 +220,7 @@ class VoiceInputController extends ChangeNotifier {
     );
   }
 
+  /// Stops speech listening
   Future<void> stopListening() async {
     if (_speech.isListening) {
       await _speech.stop();
@@ -210,10 +230,7 @@ class VoiceInputController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// ======================
-  /// ✅ CV DATA FUNCTIONS
-  /// ======================
-
+  /// Loads CV data: fresh, resumed or edit mode
   Future<void> loadCVData({Map<String, dynamic>? args}) async {
     await resetSpeech();
     isLoading = true;
@@ -254,10 +271,7 @@ class VoiceInputController extends ChangeNotifier {
       }
 
       final lastCV = await _firestoreService.getLastCV(userId);
-
-      if (lastCV != null &&
-          lastCV['cvData'] != null &&
-          (lastCV['cvData'] as Map).isNotEmpty) {
+      if (lastCV != null && lastCV['cvData'] != null && (lastCV['cvData'] as Map).isNotEmpty) {
         isResumed = true;
         cvId = lastCV['cvId'];
         final savedData = Map<String, dynamic>.from(lastCV['cvData']);
@@ -268,17 +282,16 @@ class VoiceInputController extends ChangeNotifier {
               : savedData[key] ?? '';
         }
         jumpToFirstIncomplete();
-      } else {
-        debugPrint("⚠ No valid last CV found, starting fresh.");
       }
     } catch (e) {
-      debugPrint("❌ Error loading CV data: $e");
+      debugPrint("Error loading CV data: $e");
     } finally {
       isLoading = false;
       notifyListeners();
     }
   }
 
+  /// Moves currentIndex to the first incomplete section
   void jumpToFirstIncomplete() {
     currentIndex = 0;
     for (int i = 0; i < sections.length; i++) {
@@ -299,6 +312,7 @@ class VoiceInputController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Adds current transcription to the list for multiple entries
   void addToMultipleList(String key) {
     if (transcription.trim().isNotEmpty) {
       (userData[key] as List<String>).add(transcription.trim());
@@ -307,6 +321,7 @@ class VoiceInputController extends ChangeNotifier {
     }
   }
 
+  /// Edits an entry: sets transcription to existing entry, removes from list, starts listening again
   void editEntry(BuildContext context, String key, int index) {
     transcription = (userData[key] as List<String>)[index];
     (userData[key] as List<String>).removeAt(index);
@@ -314,17 +329,19 @@ class VoiceInputController extends ChangeNotifier {
     startListening(context);
   }
 
+  /// Deletes an entry from a multiple list
   void deleteEntry(String key, int index) {
     (userData[key] as List<String>).removeAt(index);
     notifyListeners();
   }
 
+  /// Proceeds to next section or completes the CV
   Future<String?> nextSection(BuildContext context) async {
     final isConnected = await hasInternet();
     if (!isConnected) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("📡 No internet connection. Please reconnect to continue."),
+          content: Text("No internet connection. Please reconnect to continue."),
           duration: Duration(seconds: 3),
         ),
       );
@@ -371,11 +388,7 @@ class VoiceInputController extends ChangeNotifier {
               Expanded(
                 child: Text(
                   "This field is required.",
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 16,
-                    color: Colors.white,
-                  ),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16, color: Colors.white),
                 ),
               ),
             ],
@@ -397,7 +410,6 @@ class VoiceInputController extends ChangeNotifier {
         transcription = sections[currentIndex]['multiple']
             ? ''
             : (userData[nextKey]?.toString() ?? '');
-
         await resetSpeech(clearTranscription: false);
         return null;
       } else {
@@ -408,11 +420,11 @@ class VoiceInputController extends ChangeNotifier {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("❌ Error saving CV: $e"),
+          content: Text("Error saving CV: $e"),
           duration: const Duration(seconds: 3),
         ),
       );
-      debugPrint("🛑 Error in nextSection(): $e");
+      debugPrint("Error in nextSection(): $e");
       return null;
     } finally {
       isLoading = false;
@@ -420,6 +432,7 @@ class VoiceInputController extends ChangeNotifier {
     }
   }
 
+  /// Goes back to previous section
   void backSection() {
     final section = sections[currentIndex];
     final key = section['key'];
@@ -439,26 +452,15 @@ class VoiceInputController extends ChangeNotifier {
     }
   }
 
-  /// ======================
-  /// ✅ NEW METHOD: Jump directly to a section
-  /// ======================
-  void jumpToSection(int index) {
-    if (index >= 0 && index < sections.length) {
-      currentIndex = index;
-      final key = sections[currentIndex]['key'];
-      transcription = sections[currentIndex]['multiple']
-          ? ''
-          : (userData[key]?.toString() ?? '');
-      notifyListeners();
-    }
-  }
-
+  /// Dispose controller properly
   void disposeController() {
     resetSpeech();
   }
 
+  /// Returns mic status for UI
   bool get isSpeechAvailable => !micFailed;
 
+  /// Checks internet connectivity
   Future<bool> hasInternet() async {
     try {
       final result = await InternetAddress.lookup('google.com');
@@ -466,5 +468,10 @@ class VoiceInputController extends ChangeNotifier {
     } on SocketException catch (_) {
       return false;
     }
+  }
+
+  Future<void> saveCurrentData() async {
+    if (userId.isEmpty) throw Exception("User not logged in");
+    await _firestoreService.saveSection(userId, cvId, userData);
   }
 }

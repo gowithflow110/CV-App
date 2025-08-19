@@ -1,3 +1,5 @@
+//lib/routes/app_routes.dart
+
 class AppRoutes {
   // ----------------- Authentication -----------------
   static const login = '/login';                 // 👤 Sign-in screen
@@ -12,9 +14,6 @@ class AppRoutes {
   static const aiProcessing = '/ai-processing';   // ⚙️ AI animation
   static const preview = '/preview';              // 🖨 Final CV preview
   static const editCV = '/edit-cv';               // ✏️ Manual editing
-
-  // ✅ Added route for editing a specific CV section
-  static const editCVSection = '/edit-cv-section'; // ✏️ Edit individual CV section
 
   // ----------------- CV Library -----------------
   static const library = '/library';              // 📚 Saved CVs

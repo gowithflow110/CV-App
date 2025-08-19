@@ -1,4 +1,4 @@
-//home_screen.dart
+// lib/modules/dashboard/home_screen.dart
 
 import 'package:flutter/material.dart';
 import '../../routes/app_routes.dart';
@@ -119,6 +119,9 @@ class HomeScreen extends StatelessWidget {
               description:
               "View, edit or download all your previously created CVs.",
               routeName: AppRoutes.library,
+              arguments: {
+                'userId': FirebaseAuth.instance.currentUser?.uid ?? '',
+              },
             ),
           ],
         ),
@@ -150,17 +153,18 @@ class HomeScreen extends StatelessWidget {
           },
           onTap: () async {
             try {
-              await Navigator.pushNamed(context, routeName, arguments: arguments);
+              await Navigator.pushNamed(context, routeName,
+                  arguments: arguments);
             } catch (e) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text("This feature is not available yet. Please try later."),
+                  content: Text(
+                      "This feature is not available yet. Please try later."),
                   backgroundColor: Colors.redAccent,
                   behavior: SnackBarBehavior.floating,
                 ),
               );
             }
-
           },
           child: AnimatedScale(
             scale: scale,
@@ -180,7 +184,8 @@ class HomeScreen extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.08), // ✅ Softer tint for icon bg
+                        color: Colors.blue
+                            .withOpacity(0.08), // ✅ Softer tint for icon bg
                         shape: BoxShape.circle,
                       ),
                       child: Icon(icon, size: 32, color: Colors.blue),
@@ -213,7 +218,6 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ),
-
           ),
         );
       },
@@ -221,19 +225,19 @@ class HomeScreen extends StatelessWidget {
   }
 
   Future<void> _logout(BuildContext context) async {
-  try {
-    await FirebaseAuth.instance.signOut(); // ✅ Wait for sign-out
-    if (context.mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        AppRoutes.login, // ✅ Use your defined login route
-        (route) => false,
+    try {
+      await FirebaseAuth.instance.signOut(); // ✅ Wait for sign-out
+      if (context.mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          AppRoutes.login, // ✅ Use your defined login route
+              (route) => false,
+        );
+      }
+    } catch (e) {
+      print("Error during logout: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Logout failed. Please try again.')),
       );
     }
-  } catch (e) {
-    print("Error during logout: $e");
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Logout failed. Please try again.')),
-    );
   }
-}
 }

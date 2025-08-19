@@ -6,19 +6,33 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import '../../routes/app_routes.dart';
 import 'controller/voice_input_controller.dart';
 import 'widgets/section_progress_bar.dart';
+import 'widgets/section_list_item.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../models/cv_model.dart';
+import 'edit_mode_manager.dart';  // NEW import
 
 class VoiceInputScreen extends StatefulWidget {
-  const VoiceInputScreen({Key? key}) : super(key: key);
+  final String? startSectionKey; // ✅ Existing optional param
+
+   VoiceInputScreen({Key? key, this.startSectionKey}) : super(key: key);
 
   @override
   State<VoiceInputScreen> createState() => _VoiceInputScreenState();
+
+  // Add near other state variables
+  bool _useKeyboardInput = false; // toggle for keyboard vs voice
+  final TextEditingController _keyboardController = TextEditingController();
+
 }
 
 class _VoiceInputScreenState extends State<VoiceInputScreen> {
   late VoiceInputController _controller;
+  late EditModeManager _editModeManager;  // NEW manager instance
   final FirebaseAnalytics _analytics = FirebaseAnalytics.instance;
   final ScrollController _scrollController = ScrollController();
-  late TextEditingController _textController;
+  // 🔹 Add these two:
+  bool _useKeyboardInput = false; // toggle between keyboard & voice
+  final TextEditingController _keyboardController = TextEditingController();
 
   void _autoScrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -32,29 +46,71 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
   void initState() {
     super.initState();
     _controller = VoiceInputController();
-    _textController = TextEditingController();
+    _editModeManager = EditModeManager(controller: _controller, context: context);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _controller.initializeSpeech();
-      await _controller.loadCVData(
-        args: ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?,
-      );
-      _textController.text = _controller.transcription;
+
+      final args =
+      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+
+      await _controller.loadCVData(args: args);
+
+      await _editModeManager.initializeEditMode(args);
+
+      setState(() {}); // Update UI after init
     });
   }
 
   @override
   void dispose() {
-    _textController.dispose();
+    _editModeManager.dispose();
     _controller.disposeController();
     _scrollController.dispose();
     super.dispose();
+    _keyboardController.dispose(); // add this inside dispose()
+
   }
 
   Future<void> _logEvent(String name, {Map<String, dynamic>? params}) async {
     try {
       await _analytics.logEvent(name: name, parameters: params);
     } catch (_) {}
+  }
+
+  Future<void> _saveUpdatesAndExit() async {
+    await _editModeManager.saveUpdatesAndExit();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is CVModel) {
+      // Update controller.userData if different from current data
+      if (_controller.userData != args.cvData) {
+        setState(() {
+          _controller.userData = Map<String, dynamic>.from(args.cvData);
+        });
+      }
+    }
+
+    if (_editModeManager.manualController.text != _controller.transcription) {
+      _editModeManager.manualController.text = _controller.transcription;
+      _editModeManager.manualController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _editModeManager.manualController.text.length),
+      );
+    }
+
+    // Add near the end of didChangeDependencies
+    if (_keyboardController.text != _controller.transcription) {
+      _keyboardController.text = _controller.transcription;
+      _keyboardController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _keyboardController.text.length),
+      );
+    }
+
   }
 
   @override
@@ -77,18 +133,66 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
 
           return Scaffold(
             appBar: AppBar(
-              title: const Text('Voice Input'),
+              title: Text(
+                _editModeManager.isEditMode
+                    ? 'Edit Section: ${section['title']}'
+                    : 'Voice Input',
+              ),
               backgroundColor: const Color(0xFFE8F3F8),
               leading: IconButton(
                 icon: const Icon(Icons.arrow_back),
                 onPressed: controller.isLoading
                     ? null
                     : () async {
-                  await controller.resetSpeech(clearTranscription: false);
-                  if (!mounted) return;
-                  Navigator.pop(context);
+                  if (_editModeManager.isEditMode) {
+                    Navigator.pop(context); // Just pop, no saving here
+                  } else {
+                    await controller.resetSpeech(clearTranscription: false);
+                    if (!mounted) return;
+                    Navigator.pop(
+                      context,
+                      CVModel(
+                        cvId: _controller.cvId,
+                        userId: FirebaseAuth.instance.currentUser?.uid ?? '',
+                        cvData: Map<String, dynamic>.from(_controller.userData),
+                        isCompleted: false,
+                        createdAt: DateTime.now(),
+                        updatedAt: DateTime.now(),
+                      ),
+                    );
+                  }
                 },
               ),
+              actions: [
+                if (_editModeManager.isEditMode)
+                  Padding(
+                    padding:
+                    const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        elevation: 4,
+                      ),
+                      onPressed: controller.isLoading
+                          ? null
+                          : () async {
+                        await _saveUpdatesAndExit();
+                      },
+                      child: const Text(
+                        "Save Updates",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             body: controller.isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -116,11 +220,11 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                         color: Colors.black54,
                       ),
                     ),
-
                     if (multiple)
                       Container(
                         margin: const EdgeInsets.only(top: 6),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
                           borderRadius: BorderRadius.circular(6),
@@ -128,30 +232,158 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: const [
-                            Icon(Icons.add_circle, size: 14, color: Colors.blue),
+                            Icon(Icons.add_circle,
+                                size: 14, color: Colors.blue),
                             SizedBox(width: 4),
                             Text(
                               "You can add multiple entries",
-                              style: TextStyle(fontSize: 12, color: Colors.blue),
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.blue),
                             ),
                           ],
                         ),
                       ),
                     const SizedBox(height: 16),
 
-                    // Always show TextField for keyboard input
-                    TextField(
-                      controller: _textController,
-                      onChanged: (value) => controller.transcription = value,
-                      maxLines: null,
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(),
-                        hintText: 'Enter your response here...',
-                      ),
+                    Row(
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Voice'),
+                          selected: !_useKeyboardInput,
+                          onSelected: (sel) {
+                            if (sel) {
+                              setState(() => _useKeyboardInput = false);
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('Keyboard'),
+                          selected: _useKeyboardInput,
+                          onSelected: (sel) {
+                            if (sel) {
+                              // Stop listening if active
+                              if (_controller.isListening) {
+                                _controller.stopListening();
+                              }
+                              setState(() {
+                                _useKeyboardInput = true;
+                                _keyboardController.text = _controller.transcription;
+                                _keyboardController.selection = TextSelection.fromPosition(
+                                  TextPosition(offset: _keyboardController.text.length),
+                                );
+                              });
+                            }
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        if (_useKeyboardInput)
+                          const Text(
+                            'Typing mode enabled',
+                            style: TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 10),
 
-                    if (multiple && controller.transcription.trim().isNotEmpty)
+
+                    if (_editModeManager.isEditMode)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          const Text("Manual Edit"),
+                          Switch(
+                            value: controller.isManualInput,
+                            onChanged: (val) {
+                              setState(() {
+                                controller.isManualInput = val;
+                                if (!controller.isManualInput) {
+                                  controller.transcription = '';
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+
+                    const SizedBox(height: 10),
+
+                    _useKeyboardInput
+                        ? TextField(
+                      controller: _keyboardController,
+                      onChanged: (val) {
+                        controller.transcription = val; // sync with controller
+                      },
+                      maxLines: null,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        hintText: 'Type here… (feeds transcription)',
+                        suffixIcon: _keyboardController.text.isNotEmpty
+                            ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _keyboardController.clear();
+                            controller.transcription = '';
+                            setState(() {});
+                          },
+                        )
+                            : null,
+                      ),
+                    )
+                        : controller.isManualInput
+                        ? TextField(
+                      autofocus: true,
+                      maxLines: null,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        hintText: 'Edit text manually...',
+                        suffixIcon:
+                        _editModeManager.manualController.text.isNotEmpty
+                            ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _editModeManager.manualController.clear();
+                            controller.transcription = '';
+                            setState(() {});
+                          },
+                        )
+                            : null,
+                      ),
+                      controller: _editModeManager.manualController,
+                      onChanged: (val) {
+                        controller.transcription = val;
+                      },
+                    )
+                        : Container(
+                      width: double.infinity,
+                      height: 120,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.blueGrey),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: SingleChildScrollView(
+                        controller: _scrollController,
+                        child: Text(
+                          controller.transcription.isEmpty
+                              ? (multiple
+                              ? 'Your voice input will appear here...'
+                              : (controller.userData[key]
+                              ?.toString()
+                              .trim()
+                              .isNotEmpty ==
+                              true
+                              ? controller.userData[key].toString()
+                              : 'Your voice input will appear here...'))
+                              : controller.transcription,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ),
+                    ),
+
+
+                    if (multiple &&
+                        controller.transcription.trim().isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 6.0),
                         child: Align(
@@ -160,10 +392,11 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                             onPressed: controller.isLoading
                                 ? null
                                 : () {
+                              _editModeManager.editEntryIndex = null;
                               controller.addToMultipleList(key);
-                              _textController.clear();
                             },
-                            icon: const Icon(Icons.add, color: Colors.blue, size: 20),
+                            icon: const Icon(Icons.add,
+                                color: Colors.blue, size: 20),
                             label: const Text(
                               'Add Entry',
                               style: TextStyle(
@@ -172,7 +405,8 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                               ),
                             ),
                             style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               foregroundColor: Colors.blue,
                             ),
                           ),
@@ -180,15 +414,39 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                       ),
                     const SizedBox(height: 20),
 
-                    // Mic button (optional, keeps existing functionality)
-                    if (controller.isSpeechAvailable)
+                    if (!controller.isManualInput && !controller.isSpeechAvailable)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Mic not available or failed (give Mic Permission). Please type your response:",
+                            style: TextStyle(fontSize: 14, color: Colors.red),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            onChanged: (value) =>
+                            controller.transcription = value,
+                            controller:
+                            TextEditingController(text: controller.transcription),
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              hintText: 'Enter response manually...',
+                            ),
+                            maxLines: null,
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ),
+
+                    if (!controller.isManualInput && controller.isSpeechAvailable)
                       Center(
                         child: IconButton(
                           iconSize: 60,
                           icon: Icon(
                             controller.isListening ? Icons.mic_off : Icons.mic,
                             size: 50,
-                            color: controller.isListening ? Colors.red : Colors.blue,
+                            color:
+                            controller.isListening ? Colors.red : Colors.blue,
                           ),
                           onPressed: controller.isLoading
                               ? null
@@ -213,104 +471,137 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                             }
 
                             if (!controller.isListening) {
-                              await _logEvent("start_listening", params: {"section": key});
+                              await _logEvent("start_listening",
+                                  params: {"section": key});
                             } else {
-                              await _logEvent("stop_listening", params: {"section": key});
+                              await _logEvent("stop_listening",
+                                  params: {"section": key});
                             }
 
                             await controller.startListening(context);
                           },
                         ),
                       ),
+
                     const SizedBox(height: 20),
 
-                    // Navigation buttons
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        ElevatedButton.icon(
-                          icon: const Icon(Icons.arrow_back),
-                          label: const Text('Back'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    if (!_editModeManager.isEditMode)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.arrow_back),
+                            label: const Text('Back'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 10),
+                            ),
+                            onPressed: controller.currentIndex == 0 ||
+                                controller.isLoading
+                                ? null
+                                : controller.backSection,
                           ),
-                          onPressed: controller.currentIndex == 0 || controller.isLoading
-                              ? null
-                              : controller.backSection,
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.refresh, color: Colors.blue, size: 32),
-                          onPressed: controller.isLoading
-                              ? null
-                              : () async {
-                            await controller.resetSpeech(clearTranscription: true);
-                            _textController.clear();
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Retrying current text")),
-                            );
-                          },
-                        ),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                          ),
-                          icon: Icon(
-                            controller.currentIndex == controller.sections.length - 1
-                                ? Icons.check
-                                : Icons.arrow_forward,
-                          ),
-                          label: Text(
-                            controller.currentIndex == controller.sections.length - 1 ? 'Finish' : 'Next',
-                          ),
-                          onPressed: controller.isLoading
-                              ? null
-                              : () async {
-                            final result = await controller.nextSection(context);
-                            if (result == "completed") {
-                              if (!mounted) return;
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                builder: (_) => Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton(
-                                      onPressed: () {
-                                        Navigator.pushNamed(
-                                          context,
-                                          AppRoutes.preview,
-                                          arguments: {"cvData": controller.userData},
-                                        );
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(vertical: 16),
-                                        backgroundColor: Colors.blue,
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                      ),
-                                      child: const Text(
-                                        "Generate CV",
-                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh,
+                                color: Colors.blue, size: 32),
+                            onPressed: controller.isLoading
+                                ? null
+                                : () async {
+                              await controller.resetSpeech(
+                                  clearTranscription: true);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text("Retrying current text")),
                               );
-                            } else {
-                              _textController.clear();
-                            }
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 30),
+                            },
+                          ),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 10),
+                            ),
+                            icon: Icon(
+                              controller.currentIndex ==
+                                  controller.sections.length - 1
+                                  ? Icons.check
+                                  : Icons.arrow_forward,
+                            ),
+                            label: Text(
+                              controller.currentIndex ==
+                                  controller.sections.length - 1
+                                  ? 'Finish'
+                                  : 'Next',
+                            ),
+                            onPressed: controller.isLoading
+                                ? null
+                                : () async {
+                              final hasInternet =
+                              await controller.hasInternet();
+                              if (!hasInternet) {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => AlertDialog(
+                                    title: const Text("⚠️ No Internet"),
+                                    content: const Text(
+                                        "Please connect to the internet to proceed to the next section."),
+                                    actions: [
+                                      TextButton(
+                                        child: const Text("OK"),
+                                        onPressed: () =>
+                                            Navigator.pop(context),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                return;
+                              }
+
+                              final result =
+                              await controller.nextSection(context);
+                              if (result == "completed") {
+                                final userId =
+                                    FirebaseAuth.instance.currentUser?.uid ??
+                                        '';
+                                final cvId =
+                                    'cv_${DateTime.now().millisecondsSinceEpoch}';
+
+                                final cvModel = CVModel(
+                                  cvId: cvId,
+                                  userId: userId,
+                                  cvData: controller.userData,
+                                  isCompleted: false,
+                                  createdAt: DateTime.now(),
+                                  updatedAt: DateTime.now(),
+                                );
+
+                                if (_editModeManager.isEditMode) {
+                                  Navigator.pop(context,
+                                      cvModel); // Pop and send back updated CV if editing
+                                } else {
+                                  Navigator.pushNamed(
+                                      context, AppRoutes.summary,
+                                      arguments: cvModel);
+                                }
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+
+                    const SizedBox(height: 20),
+
+                    if (multiple && (controller.userData[key] as List).isNotEmpty)
+                      SectionListItem(
+                        entries: List<String>.from(controller.userData[key] as List),
+                        onEdit: (index) {
+                          _editModeManager.editEntryIndex = index;
+                          controller.editEntry(context, key, index);
+                        },
+                        onDelete: (index) => controller.deleteEntry(key, index),
+                      ),
                   ],
                 ),
               ),
