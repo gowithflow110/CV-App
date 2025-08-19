@@ -15,6 +15,7 @@ class PreviewScreen extends StatelessWidget {
   final CVModel cv;
   const PreviewScreen({Key? key, required this.cv}) : super(key: key);
 
+
   @override
   Widget build(BuildContext context) {
     final template = TemplateDefault(cv, null);
@@ -210,21 +211,21 @@ class PreviewScreen extends StatelessWidget {
   Widget _buildSection(String type, dynamic data, BuildContext context) {
     switch (type) {
       case 'header':
-        return _buildHeader(data);
+        return _sectionBlockWithEdit("HEADER", _buildHeader(data), context, 'header');
       case 'contact':
-        return _buildContact(data);
+        return _sectionBlockWithEdit("CONTACT", _buildContact(data), context, 'contact');
       case 'skills':
-        return _buildSkills(data, context);
+        return _sectionBlockWithEdit("SKILLS", _buildSkills(data, context), context, 'skills');
       case 'experience':
-        return _buildExperience(data);
+        return _sectionBlockWithEdit("EXPERIENCE", _buildExperience(data), context, 'experience');
       case 'projects':
-        return _buildProjects(data);
+        return _sectionBlockWithEdit("PROJECTS", _buildProjects(data), context, 'projects');
       case 'education':
-        return _buildEducation(data);
+        return _sectionBlockWithEdit("EDUCATION", _buildEducation(data), context, 'education');
       case 'certifications':
-        return _buildCertifications(data);
+        return _sectionBlockWithEdit("CERTIFICATION", _buildCertifications(data), context, 'certification');
       case 'languages':
-        return _buildLanguages(data);
+        return _sectionBlockWithEdit("LANGUAGES", _buildLanguages(data), context, 'languages');
       default:
         return const SizedBox.shrink();
     }
@@ -319,6 +320,9 @@ class PreviewScreen extends StatelessWidget {
               .toList(),
         ),
       ),
+
+
+
     );
   }
 
@@ -396,6 +400,50 @@ class PreviewScreen extends StatelessWidget {
       ),
     );
   }
+
+  /// Wraps a section with a title and an edit button
+  Widget _sectionBlockWithEdit(String title, Widget child, BuildContext context, String sectionType) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title.toUpperCase(),
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit, size: 20),
+                tooltip: "Edit $title",
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.voiceInput,
+                    arguments: {
+                      'cvData': cv.cvData,
+                      'cvId': cv.cvId,
+                      'userId': cv.userId,
+                      'focusedEdit': true,    // ✅ tell input screen to focus a section
+                      'editSection': sectionType, // ✅ which section to focus
+                    },
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+
+
 
   Widget _buildProjects(List<Map<String, dynamic>> projects) {
     if (projects.isEmpty) return const SizedBox.shrink();
