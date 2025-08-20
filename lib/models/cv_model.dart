@@ -3,13 +3,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CVModel {
-  final String cvId;                // Unique CV ID (same pattern as existing: cv_<timestamp>)
+  final String cvId;                // Unique CV ID
   final String userId;              // Owner's Firebase UID
   final Map<String, dynamic> cvData; // All CV sections (name, contact, skills, etc.)
   final bool isCompleted;           // Whether CV was marked complete
   final String? aiEnhancedText;     // Optional: AI-enhanced version
   final DateTime createdAt;         // Timestamp when CV was first created
   final DateTime updatedAt;         // Timestamp when CV was last updated
+  final String? sectionKey;         // Optional: current active section
 
   CVModel({
     required this.cvId,
@@ -19,6 +20,7 @@ class CVModel {
     this.aiEnhancedText,
     required this.createdAt,
     required this.updatedAt,
+    this.sectionKey,
   });
 
   /// ✅ Create a CVModel from Firestore data
@@ -37,6 +39,7 @@ class CVModel {
       updatedAt: (data['updatedAt'] is Timestamp)
           ? (data['updatedAt'] as Timestamp).toDate()
           : DateTime.now(),
+      sectionKey: data['sectionKey'], // optional section from Firestore
     );
   }
 
@@ -50,6 +53,7 @@ class CVModel {
       'aiEnhancedText': aiEnhancedText,
       'createdAt': createdAt is DateTime ? Timestamp.fromDate(createdAt) : createdAt,
       'updatedAt': updatedAt is DateTime ? Timestamp.fromDate(updatedAt) : updatedAt,
+      'sectionKey': sectionKey, // include sectionKey when saving
     };
   }
 
@@ -62,6 +66,7 @@ class CVModel {
     String? aiEnhancedText,
     DateTime? createdAt,
     DateTime? updatedAt,
+    String? sectionKey,
   }) {
     return CVModel(
       cvId: cvId ?? this.cvId,
@@ -71,6 +76,7 @@ class CVModel {
       aiEnhancedText: aiEnhancedText ?? this.aiEnhancedText,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      sectionKey: sectionKey ?? this.sectionKey, // copy sectionKey
     );
   }
 }

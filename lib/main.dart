@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart'; // ✅ Added for .env
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // Auth Screens
 import 'modules/auth/screens/sign_in_screen.dart';
@@ -18,16 +18,17 @@ import 'modules/summary/summary_screen.dart';
 import 'modules/ai_animation/ai_processing_screen.dart';
 import 'modules/cv_preview/preview_screen.dart';
 import 'modules/library/screens/library_screen.dart';
-// import 'modules/edit_cv/edit_cv_screen.dart';
+
+// Models
+import 'models/cv_model.dart';
 
 // Routes
 import 'routes/app_routes.dart';
-import 'models/cv_model.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ✅ Load API keys & env vars
+  // Load environment variables
   await dotenv.load(fileName: ".env");
 
   try {
@@ -58,29 +59,53 @@ class VoiceCVApp extends StatelessWidget {
       ),
       home: const SplashLoginScreen(),
       routes: {
+        // Authentication
         AppRoutes.login: (_) => const SignInScreen(),
+
+        // Dashboard / Home
         AppRoutes.home: (_) => const HomeScreen(),
+
+        // Resume Builder
         AppRoutes.resumePrompt: (_) => const ResumePromptScreen(),
         AppRoutes.voiceInput: (_) => const VoiceInputScreen(),
+
+        // CV Library
         AppRoutes.library: (_) => const LibraryScreen(),
-        // AppRoutes.editCV: (_) => const EditCVScreen(),
 
-        /// ✅ Summary Screen now expects a CVModel
+        // Summary Screen expects a CVModel argument
         AppRoutes.summary: (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as CVModel;
-          return SummaryScreen(cv: args);
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is CVModel) {
+            return SummaryScreen(cv: args);
+          } else {
+            return const Scaffold(
+              body: Center(child: Text('No CV data provided')),
+            );
+          }
         },
 
-        /// ✅ AI Processing Screen with CVModel
+        // AI Processing Screen expects a CVModel argument
         AppRoutes.aiProcessing: (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as CVModel;
-          return AIProcessingScreen(rawCV: args);
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is CVModel) {
+            return AIProcessingScreen(rawCV: args);
+          } else {
+            return const Scaffold(
+              body: Center(child: Text('No CV data provided')),
+            );
+          }
         },
 
-        /// ✅ Preview Screen with CVModel
+        // Preview Screen expects a CVModel argument
         AppRoutes.preview: (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as CVModel;
-          return PreviewScreen(cv: args);
+          final args = ModalRoute.of(context)?.settings.arguments;
+          if (args is CVModel) {
+            return PreviewScreen(cv: args);
+          } else {
+            return const Scaffold(
+              body: Center(child: Text('No CV data provided')),
+            );
+          }
         },
       },
     );

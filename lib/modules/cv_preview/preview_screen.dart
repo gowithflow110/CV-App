@@ -11,60 +11,74 @@ as path; // optional if you need file name handling
 import '../../services/firestore_service.dart';
 import '../../routes/app_routes.dart'; // ✅ import your AppRoutes
 
-class PreviewScreen extends StatelessWidget {
+
+class PreviewScreen extends StatefulWidget {
   final CVModel cv;
+
   const PreviewScreen({Key? key, required this.cv}) : super(key: key);
 
   @override
-  Widget build(BuildContext context) {
-    final template = TemplateDefault(cv, null);
-    final sections = template.getOrderedSections();
+  State<PreviewScreen> createState() => _PreviewScreenState();
+}
 
+
+class _PreviewScreenState extends State<PreviewScreen> {
+  late List<Map<String, dynamic>> sections;
+
+  @override
+  void initState() {
+    super.initState();
+    final template = TemplateDefault(widget.cv, null);
+    sections = template.getOrderedSections();
+  }
+
+  bool sectionDataChanged(int index) {
+    final data = sections[index]['data'];
+    if (data == null) return false;
+    if (data is List) return data.isNotEmpty;
+    if (data is String) return data.trim().isNotEmpty;
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text("CV Preview"),
-        backgroundColor:
-        const Color(0xFFE8F3F8), // ✅ same head color you asked before
+        backgroundColor: const Color(0xFFE8F3F8),
         centerTitle: true,
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) async {
               switch (value) {
                 case "download":
-                  final file = await TemplateService(cv).buildPdf();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          "CV saved to Downloads/${file.uri.pathSegments.last}",
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
-                        ),
-                        backgroundColor: Colors
-                            .blue.shade700, // darker blue for better contrast
-                        duration: const Duration(seconds: 4),
-                        action: SnackBarAction(
-                          label: "OPEN",
-                          textColor:
-                          Colors.amberAccent, // bright, high contrast
-                          onPressed: () => OpenFilex.open(file.path),
-                        ),
-                        behavior: SnackBarBehavior
-                            .floating, // makes it more modern and elevated
-                        shape: RoundedRectangleBorder(
-                          borderRadius:
-                          BorderRadius.circular(12), // rounded corners
-                        ),
+                  final file = await TemplateService(widget.cv).buildPdf();
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        "CV saved to Downloads/${file.uri.pathSegments.last}",
+                        style: const TextStyle(color: Colors.white, fontSize: 14),
                       ),
-                    );
-                  }
+                      backgroundColor: Colors.blue.shade700,
+                      duration: const Duration(seconds: 4),
+                      action: SnackBarAction(
+                        label: "OPEN",
+                        textColor: Colors.amberAccent,
+                        onPressed: () => OpenFilex.open(file.path),
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  );
                   break;
 
                 case "share":
-                  final file = await TemplateService(cv).buildPdf();
-                  await Share.shareXFiles([XFile(file.path)],
-                      text: "Check out my CV!");
+                  final file = await TemplateService(widget.cv).buildPdf();
+                  await Share.shareXFiles([XFile(file.path)], text: "Check out my CV!");
                   break;
 
                 case "save":
@@ -90,7 +104,41 @@ class PreviewScreen extends StatelessWidget {
         itemCount: sections.length,
         itemBuilder: (context, index) {
           final s = sections[index];
-          return _buildSection(s['type'], s['data'], context);
+          final sectionKey = s['type'];
+          final sectionData = s['data'];
+
+          return Stack(
+            children: [
+              _buildSection(sectionKey, sectionData, context),
+              // Positioned Edit button at top-right corner
+              Positioned(
+                right: 0,
+                top: 0,
+                child: IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.black),
+                  onPressed: () async {
+                    final updatedCV = await Navigator.pushNamed(
+                      context,
+                      AppRoutes.voiceInput,
+                      arguments: {
+                        'forceEdit': true,
+                        'editField': sectionKey,
+                        'previousData': sectionData,
+                        'editIndex': null,
+                      },
+                    );
+
+                    if (!mounted) return;
+                    if (updatedCV != null && updatedCV is CVModel) {
+                      setState(() {
+                        sections[index]['data'] = updatedCV.cvData[sectionKey];
+                      });
+                    }
+                  },
+                ),
+              ),
+            ],
+          );
         },
       ),
     );
@@ -125,7 +173,7 @@ class PreviewScreen extends StatelessWidget {
 
     try {
       // Clear last CV from Firestore
-      await FirestoreService().clearLastCV(cv.userId);
+      await FirestoreService().clearLastCV(widget.cv.userId);
 
       if (!context.mounted) return;
 
@@ -181,8 +229,8 @@ class PreviewScreen extends StatelessWidget {
 
     try {
       await FirestoreService().saveCVToLibrary(
-        cv.userId,
-        cv,
+        widget.cv.userId,
+        widget.cv,
         customName: filename,
       );
 
@@ -208,27 +256,44 @@ class PreviewScreen extends StatelessWidget {
   }
 
   Widget _buildSection(String type, dynamic data, BuildContext context) {
+    // Ensure data is always in the expected format
+    dynamic safeData;
+
+    if (data is Map<String, dynamic>) {
+      safeData = data;
+    } else if (data is List) {
+      safeData = data;
+    } else if (data is String) {
+      // Wrap single strings in a map with a 'value' key
+      safeData = {'value': data};
+    } else {
+      // Fallback to empty map
+      safeData = {};
+    }
+
     switch (type) {
       case 'header':
-        return _buildHeader(data);
+        return _buildHeader(safeData);
       case 'contact':
-        return _buildContact(data);
+        return _buildContact(safeData);
       case 'skills':
-        return _buildSkills(data, context);
+        return _buildSkills(safeData, context);
       case 'experience':
-        return _buildExperience(data);
+        return _buildExperience(safeData);
       case 'projects':
-        return _buildProjects(data);
+        return _buildProjects(safeData);
       case 'education':
-        return _buildEducation(data);
+        return _buildEducation(safeData);
       case 'certifications':
-        return _buildCertifications(data);
+        return _buildCertifications(safeData);
       case 'languages':
-        return _buildLanguages(data);
+        return _buildLanguages(safeData);
       default:
         return const SizedBox.shrink();
     }
   }
+
+
 
   Widget _buildHeader(Map<String, dynamic> data) {
     return Padding(
@@ -236,23 +301,87 @@ class PreviewScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            data['name'] ?? '',
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.bold,
-            ),
+          // Name with Edit Button
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  data['name'] ?? '',
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit, size: 20),
+                onPressed: () async {
+                  final updatedCV = await Navigator.pushNamed(
+                    context,
+                    AppRoutes.voiceInput,
+                    arguments: {
+                      'forceEdit': true,
+                      'editField': 'name',
+                      'previousData': data['name'],
+                    },
+                  );
+                  if (!mounted) return;
+                  if (updatedCV != null && updatedCV is CVModel) {
+                    setState(() {
+                      // Correct path to updated name
+                      data['name'] = updatedCV.cvData['header']?['name'] ?? '';
+                    });
+                  }
+                },
+
+              ),
+            ],
           ),
+
           const SizedBox(height: 6),
-          Text(
-            data['summary'] ?? '',
-            style: const TextStyle(fontSize: 14, height: 1.4),
+
+          // Summary with Edit Button
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  data['summary'] ?? '',
+                  style: const TextStyle(fontSize: 14, height: 1.4),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit, size: 20),
+                onPressed: () async {
+                  final updatedCV = await Navigator.pushNamed(
+                    context,
+                    AppRoutes.voiceInput,
+                    arguments: {
+                      'forceEdit': true,
+                      'editField': 'summary',
+                      'previousData': data['summary'],
+                    },
+                  );
+                  if (!mounted) return;
+                  if (updatedCV != null && updatedCV is CVModel) {
+                    setState(() {
+                      // Access summary inside header
+                      data['summary'] = updatedCV.cvData['header']?['summary'] ?? '';
+                    });
+                  }
+                },
+
+              ),
+            ],
           ),
+
           const SizedBox(height: 20),
         ],
       ),
     );
   }
+
 
   Widget _buildContact(Map<String, dynamic> data) {
     final items = <Widget>[];

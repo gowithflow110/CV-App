@@ -33,83 +33,146 @@ class EditModeManager {
     previousData = args['previousData'];
     controller.isManualInput = false;
 
-    if (editField != null) {
-      final idx = controller.sections.indexWhere((s) => s['key'] == editField);
-      if (idx != -1) {
-        controller.currentIndex = idx;
+    if (editField == null) return;
+
+    const headerFields = ['name', 'summary'];
+
+    if (headerFields.contains(editField)) {
+      // Handle header separately
+      controller.userData['header'] ??= {};
+      final headerMap = controller.userData['header'] as Map<String, dynamic>;
+
+      if (previousData != null) {
+        headerMap[editField!] = previousData.toString();
       }
 
-      final isMultiple = controller.sections
-          .firstWhere((s) => s['key'] == editField)['multiple'] as bool;
+      controller.transcription = headerMap[editField!] ?? '';
+      editEntryIndex = null;
+    } else {
+      // Normal sections
+      final idx = controller.sections.indexWhere((s) => s['key'] == editField);
+      if (idx == -1) {
+        debugPrint("Warning: editField '$editField' not found in sections.");
+        return;
+      }
+
+      controller.currentIndex = idx;
+      final section = controller.sections[idx];
+      final isMultiple = section['multiple'] as bool? ?? false;
 
       if (isMultiple) {
-        // Keep existing entries visible
         if (previousData is List<String>) {
-          controller.userData[editField!] = List<String>.from(previousData as List);
-        } else if (previousData is String && previousData!.isNotEmpty) {
-          controller.userData[editField!] = [previousData!];
+          controller.userData[editField!] = List<String>.from(previousData);
+        } else if (previousData is String && previousData.isNotEmpty) {
+          controller.userData[editField!] = [previousData];
+        } else {
+          controller.userData[editField!] = <String>[];
         }
 
-        // If editing a specific entry, preload it
         if (args.containsKey('editIndex') && args['editIndex'] != null) {
-          editEntryIndex = args['editIndex'] as int;
-          final list = List<String>.from(controller.userData[editField!] ?? []);
-          if (editEntryIndex! < list.length) {
-            controller.transcription = list[editEntryIndex!];
+          final idxEntry = args['editIndex'] as int;
+          final list = (controller.userData[editField!] as List?)?.cast<String>() ?? [];
+
+          if (idxEntry >= 0 && idxEntry < list.length) {
+            editEntryIndex = idxEntry;
+            controller.transcription = list[idxEntry];
+          } else {
+            editEntryIndex = null;
+            controller.transcription = '';
           }
         } else {
           editEntryIndex = null;
           controller.transcription = '';
         }
       } else {
-        controller.transcription = previousData?.toString() ?? '';
-        controller.userData[editField!] = controller.transcription;
+        final safePrevious = (previousData?.toString() ?? '').trim();
+        controller.transcription = safePrevious;
+        controller.userData[editField!] = safePrevious;
+        editEntryIndex = null;
       }
     }
   }
+
+
+
 
   /// Save updates for the current edit and exit (pop)
   Future<void> saveUpdatesAndExit() async {
     if (!isEditMode || editField == null) return;
 
-    final key = controller.sections[controller.currentIndex]['key'];
-    final isMultiple =
-    controller.sections[controller.currentIndex]['multiple'] as bool;
-    final required =
-    controller.sections[controller.currentIndex]['required'] as bool;
-    final trimmedValue = controller.transcription.trim();
+    final trimmedValue = manualController.text.trim();
+    controller.transcription = trimmedValue;
 
-    bool hasValidData;
-    if (isMultiple) {
-      final entries = List<String>.from(controller.userData[key] ?? []);
+    bool hasValidData = false;
+
+    // Define header fields
+    const headerFields = ['name', 'summary'];
+
+    if (headerFields.contains(editField)) {
+      // Handle header fields
+      controller.userData['header'] ??= <String, dynamic>{};
+      final headerMap = controller.userData['header'] as Map<String, dynamic>;
+
       if (trimmedValue.isNotEmpty) {
-        if (editEntryIndex != null && editEntryIndex! < entries.length) {
-          entries[editEntryIndex!] = trimmedValue;
-        } else {
-          entries.add(trimmedValue);
-        }
-      }
-      hasValidData = entries.isNotEmpty;
-      if (hasValidData) {
-        controller.userData[key] = entries;
+        headerMap[editField!] = trimmedValue;
+        hasValidData = true;
+      } else {
+        headerMap.remove(editField);
+        hasValidData = false;
       }
     } else {
-      hasValidData = trimmedValue.isNotEmpty;
-      if (hasValidData) {
-        controller.userData[key] = trimmedValue;
+      // Handle normal sections
+      final sectionIndex = controller.sections.indexWhere((s) => s['key'] == editField);
+      if (sectionIndex == -1) {
+        debugPrint("Warning: editField '$editField' not found anywhere.");
+        return;
+      }
+
+      final section = controller.sections[sectionIndex];
+      final key = section['key'];
+      final isMultiple = section['multiple'] as bool? ?? false;
+      final required = section['required'] as bool? ?? false;
+
+      if (isMultiple) {
+        final entries = List<String>.from(controller.userData[key] ?? []);
+        if (trimmedValue.isNotEmpty) {
+          final isEditing = editEntryIndex != null &&
+              editEntryIndex! >= 0 &&
+              editEntryIndex! < entries.length;
+
+          if (isEditing) {
+            entries[editEntryIndex!] = trimmedValue;
+          } else {
+            entries.add(trimmedValue);
+          }
+        }
+        hasValidData = entries.isNotEmpty;
+        if (hasValidData) {
+          controller.userData[key] = entries;
+        } else {
+          controller.userData.remove(key);
+        }
+      } else {
+        hasValidData = trimmedValue.isNotEmpty;
+        if (hasValidData) {
+          controller.userData[key] = trimmedValue;
+        } else {
+          controller.userData.remove(key);
+        }
+      }
+
+      if (required && !hasValidData) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Colors.orange,
+            content: Text("This section is required. Please enter at least one value."),
+          ),
+        );
+        return;
       }
     }
 
-    if (required && !hasValidData) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.orange,
-          content: Text("This section is required. Please enter at least one value."),
-        ),
-      );
-      return; // prevent saving if validation fails
-    }
-
+    // Save to database
     try {
       await controller.saveCurrentData();
     } catch (e) {
@@ -134,4 +197,7 @@ class EditModeManager {
 
     Navigator.pop(context, cvModel);
   }
+
+
+
 }

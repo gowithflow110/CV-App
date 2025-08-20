@@ -10,6 +10,8 @@ import 'widgets/section_list_item.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../models/cv_model.dart';
 import 'edit_mode_manager.dart';  // NEW import
+import 'package:flutter/foundation.dart';
+
 
 class VoiceInputScreen extends StatefulWidget {
   final String? startSectionKey; // ✅ Existing optional param
@@ -78,21 +80,23 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
 
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is CVModel) {
-      // Update controller.userData if different from current data
-      if (_controller.userData != args.cvData) {
-        setState(() {
-          _controller.userData = Map<String, dynamic>.from(args.cvData);
-        });
+      // Only update if the data actually differs
+      if (!mapEquals(_controller.userData, args.cvData)) {
+        _controller.userData = Map<String, dynamic>.from(args.cvData);
+        setState(() {}); // Trigger rebuild after updating userData
       }
     }
 
-    if (_editModeManager.manualController.text != _controller.transcription) {
-      _editModeManager.manualController.text = _controller.transcription;
+    // Sync manual text input with current transcription
+    final currentText = _controller.transcription ?? '';
+    if (_editModeManager.manualController.text != currentText) {
+      _editModeManager.manualController.text = currentText;
       _editModeManager.manualController.selection = TextSelection.fromPosition(
         TextPosition(offset: _editModeManager.manualController.text.length),
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -100,17 +104,65 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
       value: _controller,
       child: Consumer<VoiceInputController>(
         builder: (context, controller, _) {
-          final section = controller.sections[controller.currentIndex];
-          final String key = section['key'];
-          final bool multiple = section['multiple'];
-          final bool required = section['required'];
-          final String hint = section['hint'];
 
-          final hasCompleted = multiple
-              ? (controller.userData[key] as List).isNotEmpty
-              : (controller.userData[key]?.toString().trim().isNotEmpty ?? false);
+          if (controller.sections.isEmpty) {
+            return const Scaffold(
+              body: Center(child: Text('No sections configured')),
+            );
+          }
 
-          _autoScrollToBottom();
+// Ensure current index is within bounds
+          final int safeIndex = controller.currentIndex.clamp(0, controller.sections.length - 1);
+          final section = controller.sections[safeIndex];
+
+// Extract section properties
+          final String sectionKey = section['key'];
+          final bool multiple = section['multiple'] as bool? ?? false;
+          final bool required = section['required'] as bool? ?? false;
+          final String hint = section['hint'] as String? ?? '';
+          final headerFields = ['name', 'summary'];
+
+// Determine if section has completed data
+          final hasCompleted = headerFields.contains(sectionKey)
+              ? ((controller.userData['header']?[sectionKey]?.toString().trim().isNotEmpty) ?? false)
+              : (multiple
+              ? (((controller.userData[sectionKey] as List?)?.cast<String>().isNotEmpty) ?? false)
+              : ((controller.userData[sectionKey]?.toString().trim().isNotEmpty) ?? false));
+
+// ✅ Set transcription correctly
+          if (controller.transcription.isEmpty || _editModeManager.editEntryIndex == null) {
+            if (headerFields.contains(sectionKey)) {
+              controller.transcription = controller.userData['header']?[sectionKey] ?? '';
+            } else {
+              if (multiple) {
+                final entries = (controller.userData[sectionKey] as List?)?.cast<String>() ?? [];
+                controller.transcription = entries.isNotEmpty ? entries[0] : '';
+              } else {
+                controller.transcription = controller.userData[sectionKey]?.toString() ?? '';
+              }
+            }
+          }
+
+// ✅ Sync manual controller
+          final currentText = controller.transcription ?? '';
+          if (_editModeManager.manualController.text != currentText) {
+            _editModeManager.manualController.text = currentText;
+            _editModeManager.manualController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _editModeManager.manualController.text.length),
+            );
+          }
+
+// ✅ Auto-scroll
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _autoScrollToBottom();
+          });
+
+// Example usages of sectionKey instead of key
+          if (sectionKey.isEmpty) return SizedBox.shrink();
+          controller.addToMultipleList(sectionKey); // add current transcription
+
+// Pass sectionKey to params
+
 
           return Scaffold(
             appBar: AppBar(
@@ -285,12 +337,12 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                           controller.transcription.isEmpty
                               ? (multiple
                               ? 'Your voice input will appear here...'
-                              : (controller.userData[key]
+                              : (controller.userData[sectionKey]
                               ?.toString()
                               .trim()
                               .isNotEmpty ==
                               true
-                              ? controller.userData[key]
+                              ? controller.userData[sectionKey]
                               .toString()
                               : 'Your voice input will appear here...'))
                               : controller.transcription,
@@ -309,11 +361,14 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                             onPressed: controller.isLoading
                                 ? null
                                 : () {
-                              _editModeManager.editEntryIndex = null;
-                              controller.addToMultipleList(key);
+                              // Safety check: key must be non-null
+                              if (sectionKey.isEmpty) return ;
+
+
+                              _editModeManager.editEntryIndex = null; // reset edit index
+                              controller.addToMultipleList(sectionKey); // add current transcription
                             },
-                            icon: const Icon(Icons.add,
-                                color: Colors.blue, size: 20),
+                            icon: const Icon(Icons.add, color: Colors.blue, size: 20),
                             label: const Text(
                               'Add Entry',
                               style: TextStyle(
@@ -322,13 +377,13 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                               ),
                             ),
                             style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               foregroundColor: Colors.blue,
                             ),
                           ),
                         ),
                       ),
+
                     const SizedBox(height: 20),
 
                     if (!controller.isManualInput && !controller.isSpeechAvailable)
@@ -343,8 +398,7 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                           TextField(
                             onChanged: (value) =>
                             controller.transcription = value,
-                            controller:
-                            TextEditingController(text: controller.transcription),
+                            controller: _editModeManager.manualController,
                             decoration: const InputDecoration(
                               border: OutlineInputBorder(),
                               hintText: 'Enter response manually...',
@@ -389,10 +443,10 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
 
                             if (!controller.isListening) {
                               await _logEvent("start_listening",
-                                  params: {"section": key});
+                                  params: {"section": sectionKey});
                             } else {
                               await _logEvent("stop_listening",
-                                  params: {"section": key});
+                                  params: {"section": sectionKey});
                             }
 
                             await controller.startListening(context);
@@ -499,8 +553,10 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
                                       cvModel); // Pop and send back updated CV if editing
                                 } else {
                                   Navigator.pushNamed(
-                                      context, AppRoutes.summary,
-                                      arguments: cvModel);
+                                    context,
+                                    AppRoutes.summary,
+                                    arguments: cvModel.copyWith(sectionKey: sectionKey),
+                                  );
                                 }
                               }
                             },
@@ -510,16 +566,31 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
 
                     const SizedBox(height: 20),
 
-                    if (multiple && (controller.userData[key] as List).isNotEmpty)
-                      SectionListItem(
-                        entries: List<String>.from(controller.userData[key] as List),
-                        onEdit: (index) {
-                          _editModeManager.editEntryIndex = index;
-                          controller.editEntry(context, key, index);
-                        },
-                        onDelete: (index) => controller.deleteEntry(key, index),
-                      ),
-                  ],
+          if (multiple)
+          Builder(
+          builder: (_) {
+            final entries = (controller.userData[sectionKey] as List?)?.cast<String>() ?? [];
+          if (entries.isEmpty) return const SizedBox.shrink(); // don't show anything
+
+          return SectionListItem(
+          entries: entries,
+          onEdit: (index) {
+          if (index >= 0 && index < entries.length) {
+          _editModeManager.editEntryIndex = index;
+          controller.editEntry(context, sectionKey, index);
+          }
+          },
+          onDelete: (index) {
+          if (index >= 0 && index < entries.length) {
+            controller.deleteEntry(sectionKey, index);
+                }
+               },
+             );
+            },
+          ),
+
+
+          ],
                 ),
               ),
             ),
