@@ -1,4 +1,4 @@
-// sign_in_screen.dart
+// lib/modules/auth/screens/sign_in_screen.dart
 
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -17,11 +17,8 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen>
     with SingleTickerProviderStateMixin {
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email']);
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-
   late final AnimationController _controller;
   late final Animation<double> _scaleAnimation;
-
   bool _isSigningIn = false;
 
   @override
@@ -45,12 +42,21 @@ class _SignInScreenState extends State<SignInScreen>
 
   Future<void> _handleGoogleSignIn() async {
     setState(() => _isSigningIn = true);
+    _controller.stop();
 
     try {
       await _googleSignIn.signOut();
 
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-      if (googleUser == null) return _stopSigning();
+      if (googleUser == null) {
+        if (mounted) {
+          setState(() {
+            _isSigningIn = false;
+            _controller.repeat(reverse: true);
+          });
+        }
+        return;
+      }
 
       final GoogleSignInAuthentication googleAuth =
       await googleUser.authentication;
@@ -60,40 +66,48 @@ class _SignInScreenState extends State<SignInScreen>
         idToken: googleAuth.idToken,
       );
 
-      final userCredential = await _auth.signInWithCredential(credential);
-      final user = userCredential.user;
+      final userCredential =
+      await FirebaseAuth.instance.signInWithCredential(credential);
 
+      final user = userCredential.user;
       if (user != null) {
-        // Save user info to Firestore
-        final usersRef = FirebaseFirestore.instance.collection('users');
-        await usersRef.doc(user.uid).set({
+        final userData = {
           'uid': user.uid,
           'displayName': user.displayName ?? '',
           'email': user.email ?? '',
           'photoURL': user.photoURL ?? '',
           'lastLogin': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        };
 
-        // Navigate to home
+        final usersRef = FirebaseFirestore.instance.collection('users');
+
+        try {
+          await usersRef.doc(user.uid).set(userData, SetOptions(merge: true));
+          debugPrint('✅ User data written to Firestore');
+        } catch (e) {
+          debugPrint('❌ Firestore write failed: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Failed to save user info.')),
+            );
+          }
+        }
+
         if (mounted) {
           Navigator.pushReplacementNamed(context, AppRoutes.home);
         }
       }
     } catch (e) {
-      debugPrint('❌ Google Sign-In Error: $e');
+      debugPrint('Google Sign-In Error: $e');
       if (mounted) {
+        setState(() {
+          _isSigningIn = false;
+          _controller.repeat(reverse: true);
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Sign-in failed. Please try again.')),
         );
       }
-    } finally {
-      _stopSigning();
-    }
-  }
-
-  void _stopSigning() {
-    if (mounted) {
-      setState(() => _isSigningIn = false);
     }
   }
 
@@ -172,14 +186,13 @@ class _SignInScreenState extends State<SignInScreen>
               ),
             ),
 
-            // Loader overlay
+            // Loader overlay when signing in
             if (_isSigningIn)
               Container(
-                color: Colors.black.withOpacity(0.5),
+                color: Colors.black.withOpacity(0.5), // semi-transparent overlay
                 child: const Center(
                   child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                        Color.fromARGB(255, 29, 61, 97)),
+                    valueColor: AlwaysStoppedAnimation<Color>(Color.fromARGB(255, 29, 61, 97)), // Your custom color // voice_input_screen color
                     strokeWidth: 4,
                   ),
                 ),

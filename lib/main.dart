@@ -2,13 +2,14 @@
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 // Auth Screens
 import 'modules/auth/screens/sign_in_screen.dart';
-import 'modules/auth/screens/splash_login_screen.dart';
 
 // App Screens
 import 'modules/dashboard/home_screen.dart';
@@ -22,6 +23,7 @@ import 'modules/library/screens/library_screen.dart';
 // Routes
 import 'routes/app_routes.dart';
 import 'models/cv_model.dart';
+import 'models/pigeon_user_details.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,8 +40,39 @@ Future<void> main() async {
     debugPrint("❌ Firebase initialization error: $e");
   }
 
+  /// 🔥 Automatically sign in test user and fetch user details
+ // await signInTestUser();
+
   runApp(const VoiceCVApp());
 }
+
+/// ✅ Automatically sign in test user and load Firestore user details
+// Future<PigeonUserDetails?> signInTestUser() async {
+//   try {
+//     final userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+//       email: 'testuser1@example.com',
+//       password: 'Test12345',
+//     );
+//     debugPrint('✅ Test user signed in: ${userCredential.user!.uid}');
+//
+//     // Fetch user data from Firestore
+//     final snapshot = await FirebaseFirestore.instance
+//         .collection('users')
+//         .doc(userCredential.user!.uid)
+//         .get();
+//
+//     final data = snapshot.data(); // Map<String, dynamic>?
+//
+//     if (data != null) {
+//       final userDetails = PigeonUserDetails.fromMap(data);
+//       debugPrint('✅ User details loaded: ${userDetails.name}');
+//       return userDetails;
+//     }
+//   } catch (e) {
+//     debugPrint('❌ Error signing in test user: $e');
+//   }
+//   return null;
+// }
 
 class VoiceCVApp extends StatelessWidget {
   const VoiceCVApp({super.key});
@@ -56,7 +89,7 @@ class VoiceCVApp extends StatelessWidget {
       ),
 
       /// 🔥 Directly open HomeScreen instead of Splash/Login
-      home: const HomeScreen(),
+      home: const SignInScreen(),
 
       routes: {
         AppRoutes.login: (_) => const SignInScreen(),
@@ -64,7 +97,6 @@ class VoiceCVApp extends StatelessWidget {
         AppRoutes.resumePrompt: (_) => const ResumePromptScreen(),
         AppRoutes.voiceInput: (_) => VoiceInputScreen(),
         AppRoutes.library: (_) => const LibraryScreen(),
-        // AppRoutes.editCV: (_) => const EditCVScreen(),
 
         /// ✅ Summary Screen now expects a CVModel
         AppRoutes.summary: (context) {

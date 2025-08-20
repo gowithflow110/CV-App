@@ -88,7 +88,6 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
   }
 
   @override
-  @override
   void initState() {
     super.initState();
 
@@ -101,7 +100,7 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
       context: context, // safe here because it's just storing context
     );
 
-    // 3️⃣ Handle arguments passed via Navigator
+    // 3️⃣ Handle arguments passed via Navigator after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments as Map?;
       final cvData = args?['cvData'] ?? {};
@@ -110,7 +109,7 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
       final focusedEdit = args?['focusedEdit'] ?? false;
       final editSection = args?['editSection'];
 
-// ✅ Always initialize userData with empty lists for every section
+      // ✅ Initialize userData with empty lists for every section
       _controller.userData = {
         for (final section in _controller.sections)
           section['key']: List<String>.from(
@@ -118,20 +117,19 @@ class _VoiceInputScreenState extends State<VoiceInputScreen> {
           ),
       };
 
-
-
-
-
-      // Scroll to a section if requested
-      if (focusedEdit && editSection != null) {
-        _scrollToSection(editSection);
-      }
-
-      // Update text controllers safely
+      // ✅ Update text controllers safely
       _editModeManager.manualController.text = _controller.transcription;
       _editModeManager.manualController.selection = TextSelection.fromPosition(
         TextPosition(offset: _editModeManager.manualController.text.length),
       );
+
+      // 4️⃣ Scroll to the requested section reliably
+      if (focusedEdit && editSection != null) {
+        // Use a slight delay to ensure widgets are fully laid out
+        Future.delayed(const Duration(milliseconds: 50), () {
+          _scrollToSection(editSection);
+        });
+      }
     });
   }
 
