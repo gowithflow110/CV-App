@@ -1,4 +1,5 @@
 // lib/main.dart
+import 'download_json_screen.dart';
 
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -57,8 +58,10 @@ class VoiceCVApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         textTheme: GoogleFonts.poppinsTextTheme(),
       ),
-      home: const SplashLoginScreen(),
+      home: DownloadJsonScreen(),
       routes: {
+
+        '/download-json': (_) => DownloadJsonScreen(),
         // Authentication
         AppRoutes.login: (_) => const SignInScreen(),
 
