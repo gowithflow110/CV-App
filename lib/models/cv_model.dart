@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class CVModel {
   final String cvId;                // Unique CV ID
   final String userId;              // Owner's Firebase UID
-  final Map<String, dynamic> cvData; // All CV sections (name, contact, skills, etc.)
+  final Map<String, dynamic> cvData; // All CV sections (name, summary, skills, etc.)
   final bool isCompleted;           // Whether CV was marked complete
   final String? aiEnhancedText;     // Optional: AI-enhanced version
   final DateTime createdAt;         // Timestamp when CV was first created
@@ -27,10 +27,20 @@ class CVModel {
   factory CVModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
 
+    // Migration: flatten header if it exists
+    final cvData = Map<String, dynamic>.from(data['cvData'] ?? {});
+    if (cvData.containsKey('header')) {
+      final header = Map<String, dynamic>.from(cvData['header']);
+      if (header.containsKey('name')) cvData['name'] = header['name'];
+      if (header.containsKey('email')) cvData['email'] = header['email'];
+      if (header.containsKey('phone')) cvData['phone'] = header['phone'];
+      cvData.remove('header');
+    }
+
     return CVModel(
       cvId: data['cvId'] ?? '',
       userId: data['userId'] ?? '',
-      cvData: Map<String, dynamic>.from(data['cvData'] ?? {}),
+      cvData: cvData,
       isCompleted: data['isCompleted'] ?? false,
       aiEnhancedText: data['aiEnhancedText'],
       createdAt: (data['createdAt'] is Timestamp)
